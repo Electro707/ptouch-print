@@ -1,25 +1,27 @@
-About:
+# Ptouch-Print
+## Fork Info
+This specific branch is my personal fork.
 
-ptouch-print is a command line tool to print labels on Brother P-Touch
-printers on Linux.
+## About
+ptouch-print is a library, command line tool, and Python wrapper to print labels
+on Brother P-Touch printers on Linux.
 
 There is no need to install the printer via CUPS, the printer is accessed
 directly via libusb.
 
 The tool was written for and tested with the PT-2430PC, but meanwhile is also
 used with others (see "ptouch-print --list-supported")
-Maybe others work too (please report USB VID and PID so I can include support
-for further models, too).
-
-Further info can be found at:
-https://dominic.familie-radermacher.ch/projekte/ptouch-print/
 
 Compile instructions:
 
 ./build.sh
 
-Note:
+## Issues
+If you have any issues with this fork of the tool, feel free to create a Github Issues on this repo.
 
-Dear visitor, currently I have absolutely no time for improvements on this
-project (my free time currently is about one or two hours PER MONTH).
-Therefore, I can not look at suggestions about improvements.
+Please don't bother the original creator of any issues at first, as chances are
+any issues are caused by changes in my fork, and not the original library.
+
+## Credit
+This project is based off of Dominic Radermacher's `ptouch-print` project. Info on that can be found at:
+https://dominic.familie-radermacher.ch/projekte/ptouch-print/
