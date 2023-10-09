@@ -16,13 +16,6 @@ struct _pt_tape_info {
 	double margins;		/* default tape margins in mm */
 };
 
-#define FLAG_NONE		(0)
-#define FLAG_UNSUP_RASTER	(1 << 0)
-#define FLAG_RASTER_PACKBITS	(1 << 1)
-#define FLAG_PLITE		(1 << 2)
-#define FLAG_P700_INIT		(1 << 3)
-#define FLAG_USE_INFO_CMD	(1 << 4)
-
 typedef enum _pt_page_flags {
 	FEED_NONE	= 0x0,
 	FEED_SMALL	= 0x08,

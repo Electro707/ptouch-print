@@ -1,4 +1,6 @@
-/*
+/**
+    \file ptouch.h
+    \mainpage
 	ptouch-print - Print labels with images or text on a Brother P-Touch
 
 	Copyright (C) 2015-2021 Dominic Radermacher <dominic@familie-radermacher.ch>
@@ -20,10 +22,13 @@
 #include <stdint.h>
 #include <libusb-1.0/libusb.h>
 
+/**
+ * A structure for a Ptouch tape information
+ */
 struct _pt_tape_info {
-	uint8_t mm;		/* Tape width in mm */
-	uint16_t px;		/* Printing area in px */
-	double margins;		/* default tape margins in mm */
+	uint8_t mm;		    /** Tape width in mm */
+	uint16_t px;		/** Printing area in px */
+	double margins;		/** default tape margins in mm */
 };
 
 #define FLAG_NONE		(0)
@@ -33,6 +38,9 @@ struct _pt_tape_info {
 #define FLAG_P700_INIT		(1 << 3)
 #define FLAG_USE_INFO_CMD	(1 << 4)
 
+/**
+ * An enum defining the page flags
+ */
 typedef enum _pt_page_flags {
 	FEED_NONE	= 0x0,
 	FEED_SMALL	= 0x08,
@@ -42,6 +50,9 @@ typedef enum _pt_page_flags {
 	MIRROR		= (1 << 7),
 } pt_page_flags;
 
+/**
+ * A structure for a Ptouch device
+ */
 struct _pt_dev_info {
 	int vid;		/* USB vendor ID */
 	int pid;		/* USB product ID */
@@ -90,9 +101,36 @@ struct _ptouch_dev {
 };
 typedef struct _ptouch_dev *ptouch_dev;
 
+/**
+ * Opens the PTouch USB device
+ *
+ * \param *ptdev Pointer to a ptouch device struct
+ *
+ * \returns 0 if successful, -1 otherwise
+ */
 int ptouch_open(ptouch_dev *ptdev);
+
+/**
+ * Closes the Ptouch USB device
+ *
+ * \param ptdev A ptouch device struct
+ */
 int ptouch_close(ptouch_dev ptdev);
+
+/**
+ * Sends a command to the label printer
+ *
+ * \param ptdev A ptouch device struct
+ * \param *data A pointer to some data to send to the device
+ * \param len The length of data
+ */
 int ptouch_send(ptouch_dev ptdev, uint8_t *data, size_t len);
+
+/**
+ * Initializes the label maker
+ *
+ * \param ptdev A ptouch device struct
+ */
 int ptouch_init(ptouch_dev ptdev);
 int ptouch_lf(ptouch_dev ptdev);
 int ptouch_ff(ptouch_dev ptdev);
@@ -110,5 +148,13 @@ void ptouch_rawstatus(uint8_t raw[32]);
 void ptouch_list_supported();
 
 const char* pt_mediatype(unsigned char media_type);
+
+/**
+ * Converts a tape color from the label maker to a string
+ *
+ * \param tape_color The tape color byte returned from the label maker
+ *
+ * \returns The color as a string pointer
+ */
 const char* pt_tapecolor(unsigned char tape_color);
 const char* pt_textcolor(unsigned char text_color);
