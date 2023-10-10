@@ -6,3 +6,6 @@ build/
 !/po/POTFILES.in
 !/po/LINGUAS
 !/po/Makevars
+
+# PyCharm stuff
+.idea/
