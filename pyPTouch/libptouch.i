@@ -3,12 +3,24 @@
 %{
 #define SWIG_FILE_WITH_INIT
 #include "ptouch.h"
+
+struct _ptouch_dev deref_ptouch_dev(ptouch_dev dev){
+    return *dev;
+}
+
+struct _ptouch_stat deref_ptouch_stat(pt_dev_stat dev){
+    return *dev;
+}
+
 %}
 
 %include "stdint.i"
 %include <cpointer.i>
 %include "carrays.i"
 %array_class(uint8_t, buffer);
+
+struct _ptouch_dev deref_ptouch_dev(ptouch_dev dev);
+struct _ptouch_stat deref_ptouch_stat(pt_dev_stat dev);
 
 struct _pt_tape_info {
 	uint8_t mm;		/* Tape width in mm */
@@ -34,8 +46,6 @@ struct _pt_dev_info {
 	//size_t bytes_per_line;
 	int flags;
 };
-%pointer_class(pt_dev_info, pt_dev_info)
-typedef struct _pt_dev_info *pt_dev_info;
 
 struct _ptouch_stat {
 	uint8_t printheadmark;	// 0x80
@@ -64,8 +74,6 @@ struct _ptouch_stat {
 	uint32_t hw_setting;
 	uint16_t reserved_2;
 };
-%pointer_class(pt_dev_stat, pt_dev_stat)
-typedef struct _ptouch_stat *pt_dev_stat;
 
 struct _ptouch_dev {
 	libusb_device_handle *h;
@@ -73,8 +81,7 @@ struct _ptouch_dev {
 	pt_dev_stat status;
 	uint16_t tape_width_px;
 };
-%pointer_class(ptouch_dev, ptouch_dev)
-typedef struct _ptouch_dev *ptouch_dev;
+%pointer_class(ptouch_dev, ptouch_devP);
 
 int ptouch_open(ptouch_dev *ptdev);
 int ptouch_close(ptouch_dev ptdev);
@@ -86,6 +93,7 @@ size_t ptouch_get_max_width(ptouch_dev ptdev);
 size_t ptouch_get_tape_width(ptouch_dev ptdev);
 int ptouch_eject(ptouch_dev ptdev);
 int ptouch_getstatus(ptouch_dev ptdev);
+int ptouch_read_status(ptouch_dev ptdev, int timeout);
 int ptouch_enable_packbits(ptouch_dev ptdev);
 int ptouch_info_cmd(ptouch_dev ptdev, int size_x);
 int ptouch_rasterstart(ptouch_dev ptdev);

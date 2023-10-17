@@ -102,8 +102,8 @@ add_custom_target(git-version ALL
 )
 
 # SET_SOURCE_FILES_PROPERTIES(src/ptouchSwig.i PROPERTIES SWIG_FLAGS "-includeall")
-SWIG_ADD_LIBRARY(libptouchSwig TYPE MODULE LANGUAGE python OUTFILE_DIR ${CMAKE_CURRENT_BINARY_DIR} OUTPUT_DIR ${CMAKE_SOURCE_DIR}/pyTouch SOURCES
-	pyTouch/libptouch.i
+SWIG_ADD_LIBRARY(libptouchSwig TYPE MODULE LANGUAGE python OUTFILE_DIR ${CMAKE_CURRENT_BINARY_DIR} OUTPUT_DIR ${CMAKE_SOURCE_DIR}/pyPTouch SOURCES
+	pyPTouch/libptouch.i
 	include/ptouch.h
 	include/gettext.h
 	src/libptouch.c
@@ -124,7 +124,7 @@ target_include_directories(libptouchSwig PUBLIC
 )
 set_target_properties(libptouchSwig
 	PROPERTIES
-	LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/pyTouch
+	LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/pyPTouch
 )
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)

@@ -268,12 +268,17 @@ void ptouch_rawstatus(uint8_t raw[32])
 int ptouch_getstatus(ptouch_dev ptdev)
 {
 	char cmd[]="\x1biS";	/* 1B 69 53 = ESC i S = Status info request */
-	uint8_t buf[32];
-	int i, r, tx=0, tries=0;
-	struct timespec w;
 
 	ptouch_send(ptdev, (uint8_t *)cmd, strlen(cmd));
-	while (tx == 0) {
+	return ptouch_read_status(ptdev, 10);
+}
+
+int ptouch_read_status(ptouch_dev ptdev, int timeout){
+    uint8_t buf[32];
+    int i, r, tx=0, tries=0;
+	struct timespec w;
+
+    while (tx == 0) {
 		w.tv_sec=0;
 		w.tv_nsec=100000000;	/* 0.1 sec */
 		r=nanosleep(&w, NULL);
@@ -281,10 +286,12 @@ int ptouch_getstatus(ptouch_dev ptdev)
 			fprintf(stderr, _("read error: %s\n"), libusb_error_name(r));
 			return -1;
 		}
-		++tries;
-		if (tries > 10) {
-			fprintf(stderr, _("timeout while waiting for status response\n"));
-			return -1;
+		if(timeout != 0){
+            ++tries;
+            if (tries > timeout) {
+                fprintf(stderr, _("timeout while waiting for status response\n"));
+                return -1;
+            }
 		}
 	}
 	if (tx == 32) {

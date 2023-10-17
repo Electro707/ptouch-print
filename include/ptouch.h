@@ -139,6 +139,7 @@ size_t ptouch_get_tape_width(ptouch_dev ptdev);
 int ptouch_page_flags(ptouch_dev ptdev, uint8_t page_flags);
 int ptouch_eject(ptouch_dev ptdev);
 int ptouch_getstatus(ptouch_dev ptdev);
+int ptouch_read_status(ptouch_dev ptdev, int timeout);
 int ptouch_getmaxwidth(ptouch_dev ptdev);
 int ptouch_enable_packbits(ptouch_dev ptdev);
 int ptouch_info_cmd(ptouch_dev ptdev, int size_x);
