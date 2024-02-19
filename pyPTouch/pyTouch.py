@@ -6,7 +6,6 @@ import io
 # import the swig generated file
 from pyPTouch.ptouchSwig import *
 from PIL import Image
-from enum import Enum
 import pdf2image
 import cairosvg
 
