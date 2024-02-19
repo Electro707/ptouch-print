@@ -79,6 +79,51 @@ struct _pt_dev_info ptdevs[] = {
 	{0,0,"",0,0,0}
 };
 
+int ptouch_printer_available(void){
+	libusb_device **devs;
+	libusb_device *dev;
+	struct libusb_device_descriptor desc;
+    ssize_t cnt;
+	int r,i=0;
+	int available = 0;
+
+	if ((libusb_init(NULL)) < 0) {
+		return -1;
+	}
+    if ((cnt=libusb_get_device_list(NULL, &devs)) < 0) {
+		return -1;
+	}
+
+    while ((dev=devs[i++]) != NULL) {
+		if ((r=libusb_get_device_descriptor(dev, &desc)) < 0) {
+			libusb_free_device_list(devs, 1);
+			return -1;
+		}
+		for (int k=0; ptdevs[k].vid > 0; ++k) {
+			if ((desc.idVendor == ptdevs[k].vid) && (desc.idProduct == ptdevs[k].pid) && (ptdevs[k].flags >= 0)) {
+				if (ptdevs[k].flags & FLAG_PLITE) {
+					// Printer is in P-Lite Mode
+					available = -2;
+					continue;
+				}
+				if (ptdevs[k].flags & FLAG_UNSUP_RASTER) {
+					// Unfortunately, that printer currently is unsupported (it has a different raster data transfer
+                    available = -3;
+					continue;
+				}
+
+				available = 1;
+				break;
+			}
+		}
+		if(available){
+		    break;
+		}
+	}
+	libusb_free_device_list(devs, 1);
+	return available;
+}
+
 int ptouch_open(ptouch_dev *ptdev)
 {
 	libusb_device **devs;

@@ -102,6 +102,14 @@ struct _ptouch_dev {
 typedef struct _ptouch_dev *ptouch_dev;
 
 /**
+ * Returns whether a compatible PTouch Printer is available or not
+ *
+ * \returns 0 if no printer is available, 1 if there is, -1 if some libusb function failed,
+ *          -2 if the found printer is in P-Lite mode, and -3 if the printer is not supported
+ */
+int ptouch_printer_available(void);
+
+/**
  * Opens the PTouch USB device
  *
  * \param *ptdev Pointer to a ptouch device struct

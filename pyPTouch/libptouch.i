@@ -3,24 +3,12 @@
 %{
 #define SWIG_FILE_WITH_INIT
 #include "ptouch.h"
-
-struct _ptouch_dev deref_ptouch_dev(ptouch_dev dev){
-    return *dev;
-}
-
-struct _ptouch_stat deref_ptouch_stat(pt_dev_stat dev){
-    return *dev;
-}
-
 %}
 
 %include "stdint.i"
 %include <cpointer.i>
 %include "carrays.i"
 %array_class(uint8_t, buffer);
-
-struct _ptouch_dev deref_ptouch_dev(ptouch_dev dev);
-struct _ptouch_stat deref_ptouch_stat(pt_dev_stat dev);
 
 struct _pt_tape_info {
 	uint8_t mm;		/* Tape width in mm */
@@ -81,8 +69,8 @@ struct _ptouch_dev {
 	pt_dev_stat status;
 	uint16_t tape_width_px;
 };
-%pointer_class(ptouch_dev, ptouch_devP);
 
+int ptouch_printer_available(void);
 int ptouch_open(ptouch_dev *ptdev);
 int ptouch_close(ptouch_dev ptdev);
 int ptouch_send(ptouch_dev ptdev, uint8_t *data, size_t len);
@@ -104,3 +92,13 @@ void ptouch_list_supported();
 const char* pt_mediatype(unsigned char media_type);
 const char* pt_tapecolor(unsigned char tape_color);
 const char* pt_textcolor(unsigned char text_color);
+
+typedef struct _ptouch_dev *ptouch_dev;
+typedef struct _ptouch_stat *pt_dev_stat;
+
+%pointer_functions(struct _ptouch_dev, ptouch_devP);
+%pointer_functions(ptouch_dev, ptouch_devPP);
+
+%pointer_functions(struct _ptouch_stat, ptouch_statP);
+
+// %rename(ptouch_stat) _ptouch_stat;
