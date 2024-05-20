@@ -4,6 +4,8 @@ project(ptouch-print C)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
+option(BUILD_PYPTOUCH "Build PyPTouch's Swig Interface" OFF)
+
 include(GNUInstallDirs)
 set(CMAKE_INSTALL_PREFIX /usr)
 set(CMAKE_C_STANDARD 11)
@@ -14,13 +16,15 @@ find_package(GD REQUIRED)
 find_package(Git REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(Intl REQUIRED)
-find_package(SWIG REQUIRED)
-find_package(PythonLibs REQUIRED)
 
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 
-INCLUDE(${SWIG_USE_FILE})
-INCLUDE_DIRECTORIES(${PYTHON_INCLUDE_PATH})
+if(BUILD_PYPTOUCH)
+    find_package(SWIG REQUIRED)
+    find_package(PythonLibs REQUIRED)
+    INCLUDE(${SWIG_USE_FILE})
+    INCLUDE_DIRECTORIES(${PYTHON_INCLUDE_PATH})
+endif(BUILD_PYPTOUCH)
 #INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
 
 SET(CMAKE_SWIG_FLAGS "")
@@ -101,31 +105,33 @@ add_custom_target(git-version ALL
 	${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/gitversion.cmake
 )
 
-# SET_SOURCE_FILES_PROPERTIES(src/ptouchSwig.i PROPERTIES SWIG_FLAGS "-includeall")
-SWIG_ADD_LIBRARY(libptouchSwig TYPE MODULE LANGUAGE python OUTFILE_DIR ${CMAKE_CURRENT_BINARY_DIR} OUTPUT_DIR ${CMAKE_SOURCE_DIR}/pyPTouch SOURCES
-	pyPTouch/libptouch.i
-	include/ptouch.h
-	include/gettext.h
-	src/libptouch.c
-)
-target_link_libraries(libptouchSwig PUBLIC
-	${PYTHON_LIBRARIES}
-	${GD_LIBRARIES}
-	${LIBUSB_LIBRARIES}
-	${LIBUSB_LINK_LIBRARIES}
-	${Intl_LIBRARIES}
-)
-target_include_directories(libptouchSwig PUBLIC
-	${CMAKE_BINARY_DIR}	# HB9HEI - location of generated version.h
-	${CMAKE_SOURCE_DIR}/include
-	${GD_INCLUDE_DIR}
-	${LIBUSB_INCLUDE_DIRS}
-	${Intl_INCLUDE_DIRS}
-)
-set_target_properties(libptouchSwig
-	PROPERTIES
-	LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/pyPTouch
-)
+if(BUILD_PYPTOUCH)
+    # SET_SOURCE_FILES_PROPERTIES(src/ptouchSwig.i PROPERTIES SWIG_FLAGS "-includeall")
+    SWIG_ADD_LIBRARY(libptouchSwig TYPE MODULE LANGUAGE python OUTFILE_DIR ${CMAKE_CURRENT_BINARY_DIR} OUTPUT_DIR ${CMAKE_SOURCE_DIR}/pyPTouch SOURCES
+        pyPTouch/libptouch.i
+        include/ptouch.h
+        include/gettext.h
+        src/libptouch.c
+    )
+    target_link_libraries(libptouchSwig PUBLIC
+        ${PYTHON_LIBRARIES}
+        ${GD_LIBRARIES}
+        ${LIBUSB_LIBRARIES}
+        ${LIBUSB_LINK_LIBRARIES}
+        ${Intl_LIBRARIES}
+    )
+    target_include_directories(libptouchSwig PUBLIC
+        ${CMAKE_BINARY_DIR}	# HB9HEI - location of generated version.h
+        ${CMAKE_SOURCE_DIR}/include
+        ${GD_INCLUDE_DIR}
+        ${LIBUSB_INCLUDE_DIRS}
+        ${Intl_INCLUDE_DIRS}
+    )
+    set_target_properties(libptouchSwig
+        PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/pyPTouch
+    )
+endif(BUILD_PYPTOUCH)
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
