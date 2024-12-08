@@ -1,6 +1,7 @@
 # This file is partially copied from https://stackoverflow.com/questions/42585210/extending-setuptools-extension-to-use-cmake-in-setup-py
 import os
 import pathlib
+import shutil
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext as build_ext_orig
 
@@ -22,6 +23,7 @@ class build_ext(build_ext_orig):
         # these dirs will be created in build_py, so if you don't have
         # any python sources to bundle, the dirs will be missing
         build_temp = pathlib.Path(self.build_temp)
+        shutil.rmtree(build_temp, ignore_errors=True)
         build_temp.mkdir(parents=True, exist_ok=True)
         extdir = pathlib.Path(self.get_ext_fullpath(ext.name))
         extdir.mkdir(parents=True, exist_ok=True)
