@@ -9,3 +9,13 @@ build/
 
 # PyCharm stuff
 .idea/
+
+# docs
+docs/doxygen_out/
+
+# internal dev stuff - e707
+_devtest/
+
+# python stuff
+*.cpython-*.so/
+*.egg-info/
