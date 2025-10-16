@@ -16,6 +16,7 @@ class PTouchConnection(Exception):
 class PTouch:
     def __init__(self):
         self.dev = None  # gets assigned later when we have memory allocated by ptouch_open
+        self.printTimeout = 30      # sec, max wait time for print to finish
 
     def open(self):
         """
@@ -29,7 +30,7 @@ class PTouch:
             if ptouch_init(self.dev) != 0:
                 raise PTouchConnection()
             # needed to get printer information, such as tape lenght, etc
-            if ptouch_getstatus(self.dev) != 0:
+            if ptouch_getstatus(self.dev, 0) != 0:
                 raise PTouchConnection()
         except PTouchConnection:
             self.close()
@@ -63,7 +64,7 @@ class PTouch:
 
     def get_printhead_width_mm(self) -> int:
         """Returns the maximum tape head in millimeters"""
-        ptouch_getstatus(self.dev)
+        ptouch_getstatus(self.dev, 0)
         return self.dev.status.media_width
 
     def print_raster_img(self, img: typing.Union[str, Image.Image], resize: bool = True, eject: bool = True):
@@ -106,10 +107,7 @@ class PTouch:
                     bytes_buff[15 - (buffer_x // 8)] |= 1 << (buffer_x % 8)
             ptouch_sendraster(self.dev, bytes_buff.cast(), 16)
 
-        if eject:
-            ptouch_eject(self.dev)
-        else:
-            ptouch_ff(self.dev)
+        ptouch_finalize(self.dev, not eject)
         im.close()
 
     def print_pdf(self, pdf_path: typing.Union[str, bytes], eject_at_end: bool = True):
@@ -145,7 +143,7 @@ class PTouch:
         self.print_raster_img(im, False, eject_at_end)
 
     def read_status(self):
-        ptouch_read_status(self.dev, 0)
+        ptouch_getstatus(self.dev, 0)
         # print(self.dev.status)
         # print(self.dev.status)
         # print(ptouch_statP_value(self.dev.status))
@@ -161,10 +159,12 @@ class PTouch:
         Only call this after to call a printing function
         """
         while True:  # todo: add timeout
-            a = self.read_status()
-            # print(a.phase_type, a.status_type)
-            if a.phase_type == 0 and a.status_type == 6:  # if we get a state change, and the state is back to waiting to receive
-                break
+            a = ptouch_getstatus_nosend(self.dev, self.printTimeout)
+            if a == 0:
+                stat = self.dev.status
+                # print(a.phase_type, a.status_type)
+                if stat.status_type == 0x01:  # if we get a state change, and the state is back to waiting to receive
+                    break
 
     def send_bytes(self, data: bytes):
         """

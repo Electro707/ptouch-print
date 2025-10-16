@@ -22,6 +22,7 @@
       <tab type="classmembers" visible="yes" title="" intro=""/>
     </tab>-->
     <tab type="user" url="@ref ptouch.h" visible="yes" title="libptouch"/>
+    <tab type="user" url="@ref networkDoc.md" visible="yes" title="network daemon"/>
 
 <!--    <tab type="structs" visible="yes" title="">
       <tab type="structlist" visible="yes" title="" intro=""/>

@@ -49,7 +49,6 @@ target_link_libraries(ptouch PUBLIC
 
 target_sources(ptouch PUBLIC
 	include/ptouch.h
-	include/gettext.h
 	src/libptouch.c
 )
 
@@ -76,8 +75,8 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 # )
 
 target_sources(${PROJECT_NAME} PRIVATE
-	src/ptouch-print.c
 	include/ptouch.h
+	src/ptouch-print.c
 )
 
 add_dependencies(${PROJECT_NAME}
@@ -110,7 +109,6 @@ if(BUILD_PYPTOUCH)
     SWIG_ADD_LIBRARY(libptouchSwig TYPE MODULE LANGUAGE python OUTFILE_DIR ${CMAKE_CURRENT_BINARY_DIR} OUTPUT_DIR ${CMAKE_SOURCE_DIR}/pyPTouch SOURCES
         pyPTouch/libptouch.i
         include/ptouch.h
-        include/gettext.h
         src/libptouch.c
     )
     target_link_libraries(libptouchSwig PUBLIC
@@ -133,9 +131,16 @@ if(BUILD_PYPTOUCH)
     )
 endif(BUILD_PYPTOUCH)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gettext.cmake)
+
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
 install(TARGETS ptouch DESTINATION lib)
 install(FILES include/ptouch.h DESTINATION include)
 
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ptouch-print.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+
+if(EXISTS /etc/udev/rules.d)
+	install(FILES udev/20-usb-ptouch-permissions.rules DESTINATION /etc/udev/rules.d)
+	install(CODE "execute_process(COMMAND udevadm control --reload-rules)")
+endif()

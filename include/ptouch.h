@@ -3,7 +3,7 @@
     \mainpage
 	ptouch-print - Print labels with images or text on a Brother P-Touch
 
-	Copyright (C) 2015-2021 Dominic Radermacher <dominic@familie-radermacher.ch>
+	Copyright (C) 2015-2023 Dominic Radermacher <dominic@familie-radermacher.ch>
 
 	This program is free software; you can redistribute it and/or modify it
 	under the terms of the GNU General Public License version 3 as
@@ -20,7 +20,11 @@
 */
 
 #include <stdint.h>
+#ifdef __FreeBSD__
+#include <libusb.h>
+#else
 #include <libusb-1.0/libusb.h>
+#endif
 
 /**
  * A structure for a Ptouch tape information
@@ -37,6 +41,8 @@ struct _pt_tape_info {
 #define FLAG_PLITE		(1 << 2)
 #define FLAG_P700_INIT		(1 << 3)
 #define FLAG_USE_INFO_CMD	(1 << 4)
+#define FLAG_HAS_PRECUT		(1 << 5)
+#define FLAG_D460BT_MAGIC	(1 << 6)
 
 /**
  * An enum defining the page flags
@@ -145,12 +151,15 @@ int ptouch_ff(ptouch_dev ptdev);
 size_t ptouch_get_max_width(ptouch_dev ptdev);
 size_t ptouch_get_tape_width(ptouch_dev ptdev);
 int ptouch_page_flags(ptouch_dev ptdev, uint8_t page_flags);
-int ptouch_eject(ptouch_dev ptdev);
-int ptouch_getstatus(ptouch_dev ptdev);
-int ptouch_read_status(ptouch_dev ptdev, int timeout);
+int ptouch_finalize(ptouch_dev ptdev, int chain);
+int ptouch_getstatus(ptouch_dev ptdev, int timeout);
+int ptouch_getstatus_nosend(ptouch_dev ptdev, int timeout);
 int ptouch_getmaxwidth(ptouch_dev ptdev);
+int ptouch_send_d460bt_magic(ptouch_dev ptdev);
+int ptouch_send_d460bt_chain(ptouch_dev ptdev);
 int ptouch_enable_packbits(ptouch_dev ptdev);
 int ptouch_info_cmd(ptouch_dev ptdev, int size_x);
+int ptouch_send_precut_cmd(ptouch_dev ptdev, int precut);
 int ptouch_rasterstart(ptouch_dev ptdev);
 int ptouch_sendraster(ptouch_dev ptdev, uint8_t *data, size_t len);
 void ptouch_rawstatus(uint8_t raw[32]);

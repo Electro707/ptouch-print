@@ -14,7 +14,7 @@ used with others (see "ptouch-print --list-supported")
 
 Compile instructions:
 
-./build.sh
+./compile.sh
 
 ## Issues
 If you have any issues with this fork of the tool, feel free to create a Github Issues on this repo.

@@ -1,7 +1,7 @@
 /*
 	libptouch - functions to help accessing a brother ptouch
 
-	Copyright (C) 2013-2023 Dominic Radermacher <dominic@familie-radermacher.ch>
+	Copyright (C) 2013-2025 Dominic Radermacher <dominic@familie-radermacher.ch>
 
 	This program is free software; you can redistribute it and/or modify it
 	under the terms of the GNU General Public License version 3 as
@@ -21,13 +21,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>	/* malloc() */
-#include <string.h>	/* memcmp()  */
+#include <string.h>	/* memcmp() */
 #include <sys/types.h>	/* open() */
 #include <sys/stat.h>	/* open() */
 #include <fcntl.h>	/* open() */
 #include <time.h>	/* nanosleep(), struct timespec */
+#include <libintl.h>	/* gettext() */
 
-#include "gettext.h"	/* gettext(), ngettext() */
 #include "ptouch.h"
 
 #define _(s) gettext(s)
@@ -45,10 +45,12 @@ struct _pt_tape_info tape_info[]= {
 };
 
 struct _pt_dev_info ptdevs[] = {
+	{0x04f9, 0x2001, "PT-9200DX", 384, 360, FLAG_RASTER_PACKBITS|FLAG_HAS_PRECUT},	/* 360dpi, maximum 128px, max tape width 36mm */
+	{0x04f9, 0x2004, "PT-2300", 112, 180, FLAG_RASTER_PACKBITS|FLAG_HAS_PRECUT},	/* 180dpi, 112px printhead */
 	{0x04f9, 0x2007, "PT-2420PC", 128, 180, FLAG_RASTER_PACKBITS},	/* 180dpi, 128px, maximum tape width 24mm, must send TIFF compressed pixel data */
 	{0x04f9, 0x2011, "PT-2450PC", 128, 180, FLAG_RASTER_PACKBITS},
-	{0x04f9, 0x2019, "PT-1950", 128, 180, FLAG_RASTER_PACKBITS},	/* 180dpi, apparently 112px printhead ?, maximum tape width 18mm - unconfirmed if it works */
-	{0x04f9, 0x201f, "PT-2700", 128, 180, FLAG_NONE},
+	{0x04f9, 0x2019, "PT-1950", 112, 180, FLAG_RASTER_PACKBITS},	/* 180dpi, apparently 112px printhead ?, maximum tape width 18mm - unconfirmed if it works */
+	{0x04f9, 0x201f, "PT-2700", 128, 180, FLAG_HAS_PRECUT},
 	{0x04f9, 0x202c, "PT-1230PC", 128, 180, FLAG_NONE},		/* 180dpi, supports tapes up to 12mm - I don't know how much pixels it can print! */
 	/* Notes about the PT-1230PC: While it is true that this printer supports
 	   max 12mm tapes, it apparently expects > 76px data - the first 32px
@@ -65,17 +67,28 @@ struct _pt_dev_info ptdevs[] = {
 	{0x04f9, 0x205f, "PT-E500", 128, 180, FLAG_RASTER_PACKBITS},
 	/* Note about the PT-E500: was reported by Jesse Becker with the
 	   remark that it also needs some padding (white pixels) */
-	{0x04f9, 0x2061, "PT-P700", 128, 180, FLAG_RASTER_PACKBITS|FLAG_P700_INIT},
+	{0x04f9, 0x2060, "PT-E550W", 128, 180, FLAG_UNSUP_RASTER},
+	/* Note about the PT-E550W: was reported by Tim Biermann but does not
+	   work yet (only prints empty tape with FLAG_RASTER_PACKBITS|FLAG_HAS_PRECUT) */
+	{0x04f9, 0x2061, "PT-P700", 128, 180, FLAG_RASTER_PACKBITS|FLAG_P700_INIT|FLAG_HAS_PRECUT},
 	{0x04f9, 0x2062, "PT-P750W", 128, 180, FLAG_RASTER_PACKBITS|FLAG_P700_INIT},
 	{0x04f9, 0x2064, "PT-P700 (PLite Mode)", 128, 180, FLAG_PLITE},
 	{0x04f9, 0x2065, "PT-P750W (PLite Mode)", 128, 180, FLAG_PLITE},
+	{0x04f9, 0x20df, "PT-D410", 128, 180, FLAG_USE_INFO_CMD|FLAG_HAS_PRECUT|FLAG_D460BT_MAGIC},
 	{0x04f9, 0x2073, "PT-D450", 128, 180, FLAG_USE_INFO_CMD},
 	/* Notes about the PT-D450: I'm unsure if print width really is 128px */
+	{0x04f9, 0x20e0, "PT-D460BT", 128, 180, FLAG_P700_INIT|FLAG_USE_INFO_CMD|FLAG_HAS_PRECUT|FLAG_D460BT_MAGIC},
 	{0x04f9, 0x2074, "PT-D600", 128, 180, FLAG_RASTER_PACKBITS},
 	/* PT-D600 was reported to work, but with some quirks (premature
 	   cutting of tape, printing maximum of 73mm length) */
+	{0x04f9, 0x20e1, "PT-D610BT", 128, 180, FLAG_P700_INIT|FLAG_USE_INFO_CMD|FLAG_HAS_PRECUT|FLAG_D460BT_MAGIC},
 	//{0x04f9, 0x200d, "PT-3600", 384, 360, FLAG_RASTER_PACKBITS},
-	{0x04f9, 0x20af, "PT-P710BT", 128, 180, FLAG_RASTER_PACKBITS},
+	{0x04f9, 0x20af, "PT-P710BT", 128, 180, FLAG_RASTER_PACKBITS|FLAG_HAS_PRECUT},
+	/* added by Christian, PT-E310BT (aka PT-E310BTVP) requires these flags, otherwise not returning from libusb_bulk_transfer-call */
+	/* printhead 128px, 180 dpi resolution */
+	/* 3,5/6/9/12/18 mm TZe Tapes, 12mm and 18mm tested */
+	/* 5,2/9/11,2 mm HSe heat shrink tubes not tested, probably requiring extension of struct _pt_tape_info */
+        {0x04f9, 0x2201, "PT-E310BT", 128, 180, FLAG_P700_INIT|FLAG_USE_INFO_CMD|FLAG_D460BT_MAGIC},
 	{0,0,"",0,0,0}
 };
 
@@ -204,6 +217,9 @@ int ptouch_open(ptouch_dev *ptdev)
 
 int ptouch_close(ptouch_dev ptdev)
 {
+	if (!ptdev) {
+		return -1;
+	}
 	libusb_release_interface(ptdev->h, 0);
 	libusb_close(ptdev->h);
 	return 0;
@@ -213,7 +229,11 @@ int ptouch_send(ptouch_dev ptdev, uint8_t *data, size_t len)
 {
 	int r, tx;
 
-	if ((ptdev == NULL) || (len > 128)) {
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_send() with NULL ptdev\n"));
+		return -1;
+	}
+	if (len > 128) {
 		return -1;
 	}
 	if ((r=libusb_bulk_transfer(ptdev->h, 0x02, data, (int)len, &tx, 0)) != 0) {
@@ -237,6 +257,30 @@ int ptouch_init(ptouch_dev ptdev)
 	return ptouch_send(ptdev, (uint8_t *)cmd, sizeof(cmd));
 }
 
+/* Sends some magic commands to enable chaining on the PT-D460BT.
+   These should go out right before magic commands. */
+int ptouch_send_d460bt_chain(ptouch_dev ptdev)
+{
+	uint8_t cmd[] = "\x1b\x69\x4b\x00";
+	return ptouch_send(ptdev, (uint8_t *)cmd, sizeof(cmd));
+}
+
+/* Sends some magic commands to make prints work on the PT-D460BT.
+   These should go out after info_cmd and right before the raster data. */
+int ptouch_send_d460bt_magic(ptouch_dev ptdev)
+{
+	/* 1B 69 64 {n1} {n2} {n3} {n4} */
+	uint8_t cmd[7];
+	/* n1 and n2 are the length margin/spacing, in px? (uint16_t value, little endian) */
+	/* A value of 0x06 is equivalent to the width margin on 6mm tape */
+	/* A value of 0x01 adds barely any margin, suitable for image printing */
+	/* The default for P-Touch software is 0x0e */
+	/* n3 must be 0x4D or the print gets corrupted! */
+	/* n4 seems to be ignored or reserved. */
+	memcpy(cmd, "\x1b\x69\x64\x01\x00\x4d\x00", 7);
+	return ptouch_send(ptdev, (uint8_t *)cmd, sizeof(cmd));
+}
+
 int ptouch_enable_packbits(ptouch_dev ptdev)
 {				/* 4D 00 = disable compression */
 	char cmd[] = "M\x02";	/* 4D 02 = enable packbits compression mode */
@@ -246,6 +290,11 @@ int ptouch_enable_packbits(ptouch_dev ptdev)
 /* print information command */
 int ptouch_info_cmd(ptouch_dev ptdev, int size_x)
 {
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_info_cmd() with NULL ptdev\n"));
+		return -1;
+	}
+
 	/* 1B 69 7A {n1} {n2} {n3} {n4} {n5} {n6} {n7} {n8} {n9} {n10} */
 	uint8_t cmd[] = "\x1b\x69\x7a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
 
@@ -261,11 +310,32 @@ int ptouch_info_cmd(ptouch_dev ptdev, int size_x)
 	cmd[8] = (uint8_t) (size_x >> 8) & 0xff;
 	cmd[9] = (uint8_t) (size_x >> 16) & 0xff;
 	cmd[10] = (uint8_t) (size_x >> 24) & 0xff;
+	if ((ptdev->devinfo->flags & FLAG_D460BT_MAGIC) == FLAG_D460BT_MAGIC) {
+		/* n9 is set to 2 in order to feed the last of the label and properly stop printing. */
+		cmd[11] = (uint8_t) 0x02;
+	}
 	return ptouch_send(ptdev, cmd, sizeof(cmd)-1);
+}
+
+/* If set, printer will prompt to cut blank tape before finishing the print.
+ If not set, printer will print normally with a big blank space on the label.
+ The printer ignores this value if the print is very short. */
+/* 0x80 horizontally mirrors the print */
+int ptouch_send_precut_cmd(ptouch_dev ptdev, int precut)
+{
+	char cmd[] = "\x1b\x69\x4d\x00";
+	if (precut) {
+		cmd[3] = 0x40;
+	}
+	return ptouch_send(ptdev, (uint8_t *)cmd, sizeof(cmd)-1);
 }
 
 int ptouch_rasterstart(ptouch_dev ptdev)
 {
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_rasterstart() with NULL ptdev\n"));
+		return -1;
+	}
 	/* 1B 69 52 01 = Select graphics transfer mode = Raster */
 	char cmd[] = "\x1b\x69\x52\x01";
 	/* 1B 69 61 01 = switch mode (0=esc/p, 1=raster mode) */
@@ -290,12 +360,22 @@ int ptouch_ff(ptouch_dev ptdev)
 	return ptouch_send(ptdev, (uint8_t *)cmd, strlen(cmd));
 }
 
-/* print and cut tape */
-int ptouch_eject(ptouch_dev ptdev)
+/* finish print and either cut or leave tape in machine */
+int ptouch_finalize(ptouch_dev ptdev, int chain)
 {
-	char cmd[]="\x1a";
-	return ptouch_send(ptdev, (uint8_t *)cmd, strlen(cmd));
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_finalize() with NULL ptdev\n"));
+		return -1;
+	}
+
+	char cmd_eject[]="\x1a"; /* Print command with feeding */
+	char cmd_chain[]="\x0c"; /* Print command (no cut) */
+
+	// The D460BT devices use a leading packet to indicate chaining instead.
+	char *cmd = (chain && (!(ptdev->devinfo->flags & FLAG_D460BT_MAGIC))) ? cmd_chain : cmd_eject;
+	return ptouch_send(ptdev, (uint8_t *)cmd, 1);
 }
+
 
 void ptouch_rawstatus(uint8_t raw[32])
 {
@@ -310,18 +390,29 @@ void ptouch_rawstatus(uint8_t raw[32])
 	return;
 }
 
-int ptouch_getstatus(ptouch_dev ptdev)
+int ptouch_getstatus(ptouch_dev ptdev, int timeout)
 {
 	char cmd[]="\x1biS";	/* 1B 69 53 = ESC i S = Status info request */
 
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_getstatus() with NULL ptdev\n"));
+		return -1;
+	}
+
 	ptouch_send(ptdev, (uint8_t *)cmd, strlen(cmd));
-	return ptouch_read_status(ptdev, 10);
+    return ptouch_getstatus_nosend(ptdev, timeout);
 }
 
-int ptouch_read_status(ptouch_dev ptdev, int timeout){
-    uint8_t buf[32];
-    int i, r, tx=0, tries=0;
+int ptouch_getstatus_nosend(ptouch_dev ptdev, int timeout)
+{
+	uint8_t buf[32] = {};
+	int i, r, tx=0, tries=0, maxtries=timeout*10;
 	struct timespec w;
+
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_getstatus() with NULL ptdev\n"));
+		return -1;
+	}
 
     while (tx == 0) {
 		w.tv_sec=0;
@@ -331,12 +422,10 @@ int ptouch_read_status(ptouch_dev ptdev, int timeout){
 			fprintf(stderr, _("read error: %s\n"), libusb_error_name(r));
 			return -1;
 		}
-		if(timeout != 0){
-            ++tries;
-            if (tries > timeout) {
-                fprintf(stderr, _("timeout while waiting for status response\n"));
-                return -1;
-            }
+		++tries;
+		if (timeout && tries > maxtries) {
+			fprintf(stderr, _("timeout (%i sec) while waiting for status response\n"), timeout);
+			return -1;
 		}
 	}
 	if (tx == 32) {
@@ -375,11 +464,19 @@ int ptouch_read_status(ptouch_dev ptdev, int timeout){
 
 size_t ptouch_get_tape_width(ptouch_dev ptdev)
 {
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_get_tape_width() with NULL ptdev\n"));
+		return 0;
+	}
 	return ptdev->tape_width_px;
 }
 
 size_t ptouch_get_max_width(ptouch_dev ptdev)
 {
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_get_max_width() with NULL ptdev\n"));
+		return 0;
+	}
 	return ptdev->devinfo->max_px;
 }
 
@@ -388,6 +485,10 @@ int ptouch_sendraster(ptouch_dev ptdev, uint8_t *data, size_t len)
 	uint8_t buf[64];
 	int rc;
 
+	if (!ptdev) {
+		fprintf(stderr, _("debug: called ptouch_sendraster() with NULL ptdev\n"));
+		return -1;
+	}
 	if (len > (size_t)(ptdev->devinfo->max_px / 8)) {
 		return -1;
 	}
