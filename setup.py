@@ -2,8 +2,9 @@
 import os
 import pathlib
 import shutil
+import sys
 from setuptools import Extension, setup
-from setuptools.command.build_ext import build_ext as build_ext_orig
+from setuptools.command.build_ext import build_ext
 
 class CMakeExtension(Extension):
     def __init__(self, name):
@@ -11,13 +12,13 @@ class CMakeExtension(Extension):
         super().__init__(name, sources=[])
 
 
-class build_ext(build_ext_orig):
+class CMakeBuild(build_ext):
     def run(self):
         for ext in self.extensions:
-            self.build_cmake(ext)
-        super().run()
+            self.build_extension(ext)
+        # super().run()
 
-    def build_cmake(self, ext):
+    def build_extension(self, ext):
         cwd = pathlib.Path().absolute()
 
         # these dirs will be created in build_py, so if you don't have
@@ -25,13 +26,19 @@ class build_ext(build_ext_orig):
         build_temp = pathlib.Path(self.build_temp)
         shutil.rmtree(build_temp, ignore_errors=True)
         build_temp.mkdir(parents=True, exist_ok=True)
-        extdir = pathlib.Path(self.get_ext_fullpath(ext.name))
-        extdir.mkdir(parents=True, exist_ok=True)
+        # extdir = pathlib.Path(self.get_ext_fullpath(ext.name)).resolve()
+        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+
+        cfg = 'Debug' if self.debug else 'Release'
 
         # example of cmake args
         cmake_args = [
-            # '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + str(extdir.parent.absolute()),
-            '-DBUILD_PYPTOUCH=1'
+            f"-DCMAKE_BUILD_TYPE={cfg}",
+            f"-DPYTOUCH_OUTPUT_DIR={extdir}",
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
+            "-DBUILD_PYPTOUCH=1",
+            f"-DPython3_EXECUTABLE={sys.executable}"
+            # "--trace"
         ]
 
         os.chdir(str(build_temp))
@@ -43,7 +50,7 @@ class build_ext(build_ext_orig):
 
 
 setup(
-    ext_modules=[CMakeExtension('ptouch-print')],
+    ext_modules=[CMakeExtension('pyPTouch._libptouchSwig')],
     cmdclass={
-        'build_ext': build_ext,
+        'build_ext': CMakeBuild,
     })
