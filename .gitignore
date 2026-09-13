@@ -1,5 +1,9 @@
 # generated files
 build/
+docs/doxygen_out/
+
+# internal scratchpad
+_devtest/
 
 # special directories
 /po
