@@ -65,13 +65,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 	ptouch
 )
 
-# target_link_libraries(${PROJECT_NAME} PRIVATE
-# 	${GD_LIBRARIES}
-# 	${LIBUSB_LIBRARIES}
-# 	${LIBUSB_LINK_LIBRARIES}
-# 	${Intl_LIBRARIES}
-# )
-
 target_sources(${PROJECT_NAME} PRIVATE
 	include/ptouch.h
 	src/ptouch-print.c
@@ -129,10 +122,6 @@ if(BUILD_PYPTOUCH)
         ${LIBUSB_INCLUDE_DIRS}
         ${Intl_INCLUDE_DIRS}
     )
-    # set_target_properties(libptouchSwig
-    #     PROPERTIES
-    #     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-    # )
 endif(BUILD_PYPTOUCH)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gettext.cmake)
