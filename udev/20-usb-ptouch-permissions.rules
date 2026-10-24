@@ -5,6 +5,7 @@ SUBSYSTEM == "usb", ATTRS{idVendor} == "04f9", ATTRS{idProduct} == "2011", MODE=
 SUBSYSTEM == "usb", ATTRS{idVendor} == "04f9", ATTRS{idProduct} == "2019", MODE="0660", TAG+="uaccess"
 SUBSYSTEM == "usb", ATTRS{idVendor} == "04f9", ATTRS{idProduct} == "201f", MODE="0660", TAG+="uaccess"
 SUBSYSTEM == "usb", ATTRS{idVendor} == "04f9", ATTRS{idProduct} == "202c", MODE="0660", TAG+="uaccess"
+SUBSYSTEM == "usb", ATTRS{idVendor} == "04f9", ATTRS{idProduct} == "202e", MODE="0660", TAG+="uaccess"
 SUBSYSTEM == "usb", ATTRS{idVendor} == "04f9", ATTRS{idProduct} == "202d", MODE="0660", TAG+="uaccess"
 SUBSYSTEM == "usb", ATTRS{idVendor} == "04f9", ATTRS{idProduct} == "2041", MODE="0660", TAG+="uaccess"
 SUBSYSTEM == "usb", ATTRS{idVendor} == "04f9", ATTRS{idProduct} == "205e", MODE="0660", TAG+="uaccess"

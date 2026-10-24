@@ -56,6 +56,7 @@ struct _pt_dev_info ptdevs[] = {
 	   max 12mm tapes, it apparently expects > 76px data - the first 32px
 	   must be blank. */
 	{0x04f9, 0x202d, "PT-2430PC", 128, 180, FLAG_NONE},		/* 180dpi, maximum 128px */
+	{0x04f9, 0x202e, "PT-9800PCN", 384, 360, FLAG_RASTER_PACKBITS|FLAG_HAS_PRECUT},	/* 360dpi, maximum 128px, max tape width 36mm */
 	{0x04f9, 0x2030, "PT-1230PC (PLite Mode)", 128, 180, FLAG_PLITE},
 	{0x04f9, 0x2031, "PT-2430PC (PLite Mode)", 128, 180, FLAG_PLITE},
 	{0x04f9, 0x2041, "PT-2730", 128, 180, FLAG_NONE},		/* 180dpi, maximum 128px, max tape width 24mm - reported to work with some quirks */
