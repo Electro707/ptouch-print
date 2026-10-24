@@ -3,7 +3,7 @@
     \mainpage
 	ptouch-print - Print labels with images or text on a Brother P-Touch
 
-	Copyright (C) 2015-2023 Dominic Radermacher <dominic@familie-radermacher.ch>
+	Copyright (C) 2015-2026 Dominic Radermacher <dominic@familie-radermacher.ch>
 
 	This program is free software; you can redistribute it and/or modify it
 	under the terms of the GNU General Public License version 3 as
@@ -30,9 +30,10 @@
  * A structure for a Ptouch tape information
  */
 struct _pt_tape_info {
-	uint8_t mm;		    /** Tape width in mm */
-	uint16_t px;		/** Printing area in px */
-	double margins;		/** default tape margins in mm */
+	uint8_t mm;		/* Tape width in mm */
+	uint16_t px;		/* Printing area in px at 180 dpi */
+	uint16_t px360;		/* Printing area in px at 360 dpi */
+	double margins;		/* default tape margins in mm */
 };
 
 #define FLAG_NONE		(0)
@@ -67,6 +68,15 @@ struct _pt_dev_info {
 	int dpi;		/* Dots per inch of the printhead */
 	//size_t bytes_per_line;
 	int flags;
+	/* Pins to shift the print area from the centre of the printhead.
+	   On some models the print area is not centred on the head; see the
+	   Brother "Software Developer's Manual - Raster Command Reference,
+	   PT-P900/P900W/P950NW", section 2.3.5 "Raster line". 0 = centred. */
+	int pin_offset;
+	/* Seconds to wait for a status response when the user did not ask for a
+	   particular --timeout. 0 means use the global default; a printer only
+	   needs an entry here if the global default is too short for it. */
+	int min_timeout;
 };
 typedef struct _pt_dev_info *pt_dev_info;
 
@@ -124,6 +134,8 @@ int ptouch_printer_available(void);
  */
 int ptouch_open(ptouch_dev *ptdev);
 
+int ptouch_open_serial(ptouch_dev *ptdev, const char *serial);
+
 /**
  * Closes the Ptouch USB device
  *
@@ -148,8 +160,11 @@ int ptouch_send(ptouch_dev ptdev, uint8_t *data, size_t len);
 int ptouch_init(ptouch_dev ptdev);
 int ptouch_lf(ptouch_dev ptdev);
 int ptouch_ff(ptouch_dev ptdev);
+int ptouch_get_dpi(ptouch_dev ptdev);
+int ptouch_calc_tape_px(ptouch_dev ptdev, const uint8_t tape_with_mm);
 size_t ptouch_get_max_width(ptouch_dev ptdev);
 size_t ptouch_get_tape_width(ptouch_dev ptdev);
+int ptouch_get_max_lines(ptouch_dev ptdev, int fontsize_px);
 int ptouch_page_flags(ptouch_dev ptdev, uint8_t page_flags);
 int ptouch_finalize(ptouch_dev ptdev, int chain);
 int ptouch_getstatus(ptouch_dev ptdev, int timeout);
@@ -164,6 +179,7 @@ int ptouch_rasterstart(ptouch_dev ptdev);
 int ptouch_sendraster(ptouch_dev ptdev, uint8_t *data, size_t len);
 void ptouch_rawstatus(uint8_t raw[32]);
 void ptouch_list_supported();
+int ptouch_list_connected();
 
 const char* pt_mediatype(unsigned char media_type);
 

@@ -1,7 +1,7 @@
 /*
 	ptouch-print - Print labels with images or text on a Brother P-Touch
 
-	Copyright (C) 2015-2025 Dominic Radermacher <dominic@familie-radermacher.ch>
+	Copyright (C) 2015-2026 Dominic Radermacher <dominic@familie-radermacher.ch>
 
 	This program is free software; you can redistribute it and/or modify it
 	under the terms of the GNU General Public License version 3 as
@@ -18,6 +18,7 @@
 */
 
 #include <argp.h>
+#include <errno.h>
 #include <stdio.h>	/* printf() */
 #include <stdlib.h>	/* exit(), malloc() */
 #include <stdbool.h>
@@ -34,21 +35,37 @@
 
 #define _(s) gettext(s)
 
-#define MAX_LINES 4	/* maybe this should depend on tape size */
+#ifdef NEED_STRCHRNUL
+/* GNU extension. argp-standalone references it, so platforms that need
+   argp-standalone need this too. Selected by cmake/Findargp.cmake. */
+char *strchrnul(const char *s, int c)
+{
+	const char *p = strchr(s, c);
+	return (char *)(p ? p : s + strlen(s));
+}
+#endif
+
+#define MAX_LINES 4	/* this should be calculated depending on tape size */
 
 #define P_NAME "ptouch-print"
 
+typedef enum { ALIGN_LEFT = 'l', ALIGN_CENTER = 'c', ALIGN_RIGHT = 'r' } align_type_t;
+
 struct arguments {
+	align_type_t align;
 	bool chain;
+	bool precut;
 	int copies;
 	bool debug;
 	bool info;
 	char *font_file;
 	int font_size;
+	int font_margin;
 	int forced_tape_width;
 	char *save_png;
 	int verbose;
 	int timeout;
+	char *serial;
 };
 
 typedef enum { JOB_CUTMARK, JOB_IMAGE, JOB_PAD, JOB_TEXT, JOB_UNDEFINED } job_type_t;
@@ -65,48 +82,57 @@ void rasterline_setpixel(uint8_t* rasterline, size_t size, int pixel);
 int get_baselineoffset(char *text, char *font, int fsz);
 int find_fontsize(int want_px, char *font, char *text);
 int needed_width(char *text, char *font, int fsz);
-int print_img(ptouch_dev ptdev, gdImage *im, int chain);
+int print_img(ptouch_dev ptdev, gdImage *im, int chain, int precut);
 int write_png(gdImage *im, const char *file);
 gdImage *img_append(gdImage *in_1, gdImage *in_2);
 gdImage *img_cutmark(int print_width);
 gdImage *render_text(char *font, char *line[], int lines, int print_width);
 void unsupported_printer(ptouch_dev ptdev);
 void add_job(job_type_t type, int n, char *line);
+void add_text(struct argp_state *state, char *arg, bool new_job);
 static error_t parse_opt(int key, char *arg, struct argp_state *state);
 
 const char *argp_program_version = P_NAME " " VERSION;
 const char *argp_program_bug_address = "Dominic Radermacher <dominic@familie-radermacher.ch>";
 static char doc[] = "ptouch-print is a command line tool to print labels on Brother P-Touch printers on Linux.";
-static char args_doc[] = "";
 
 static struct argp_option options[] = {
 	// name, key, arg, flags, doc, group
 	{ 0, 0, 0, 0, "options:", 1},
 	{ "debug", 1, 0, 0, "Enable debug output", 1},
 	{ "font", 2, "<file>", 0, "Use font <file> or <name>", 1},
-	{ "fontsize", 3, "<size>", 0, "Manually set font size", 1},
-	{ "writepng", 4, "<file>", 0, "Instead of printing, write output to png <file>", 1},
-	{ "force-tape-width", 5, "<px>", 0, "Set tape width in pixels, use together with --writepng without a printer connected", 1},
-	{ "copies", 6, "<number>", 0, "Sets the number of identical prints", 1},
-	{ "timeout", 7, "<seconds>", 0, "Set timeout waiting for finishing previous job. Default:1, 0 means infinity", 1},
+	{ "font-size", 3, "<size>", 0, "Manually set font size, or ...", 1},
+	{ "fontsize", 3, "<size>", OPTION_ALIAS, "alias for font-size", 1},
+	{ "font-margin", 4, "<size>", 0, "Manually set font top/bottom margin (in px)", 1},
+	{ "fontmargin", 4, "<size>", OPTION_ALIAS, "alias for font-margin", 1},
+	{ "write-png", 'w', "<file>", 0, "Instead of printing, write output to png <file>", 1},
+	{ "writepng", 'w', "<file>", OPTION_ALIAS, "alias for write-png", 1},
+	{ "force-tape-width", 6, "<px>", 0, "Set tape width in pixels, use together with --writepng without a printer connected", 1},
+	{ "copies", 7, "<number>", 0, "Sets the number of identical prints", 1},
+	{ "timeout", 8, "<seconds>", 0, "Set timeout waiting for finishing previous job. Default:1, or a per-printer minimum where one is known. 0 means infinity", 1},
+	{ "serial", 12, "<serial>", 0, "Use the printer with this USB serial number", 1 },
 
 	{ 0, 0, 0, 0, "print commands:", 2},
 	{ "image", 'i', "<file>", 0, "Print the given image which must be a 2 color (black/white) png", 2},
-	{ "text", 't', "<text>", 0, "Print line of <text>. If the text contains spaces, use quotation marks taround it", 2},
+	{ "text", 't', "<text>", 0, "Print line of <text>. If the text contains spaces, use quotation marks around it. \\n will be replaced by a newline", 2},
 	{ "cutmark", 'c', 0, 0, "Print a mark where the tape should be cut", 2},
 	{ "pad", 'p', "<n>", 0, "Add n pixels padding (blank tape)", 2},
 	{ "chain", 10, 0, 0, "Skip final feed of label and any automatic cut", 2},
-	{ "newline", 'n', "<text>", 0, "Add text in a new line (up to 4 lines)", 2},
+	{ "precut", 11, 0, 0, "Add a cut before the label (useful in chain mode for cuts with minimal waste)", 2},
+	{ "newline", 'n', "<text>", 0, "Add text in a new line (up to 4 lines). \\n will be replaced by a newline", 2},
+	{ "align", 'a', "<l|c|r>", 0, "Align text (when printing multiple lines)", 2},
 
 	{ 0, 0, 0, 0, "other commands:", 3},
 	{ "info", 20, 0, 0, "Show info about detected tape", 3},
 	{ "list-supported", 21, 0, 0, "Show printers supported by this version", 3},
+	{ "list-connected", 22, 0, 0, "Show connected printers and their USB serial numbers (for --serial)", 3},
 	{ 0 }
 };
 
-static struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
+static struct argp argp = { options, parse_opt, NULL, doc, NULL, NULL, NULL };
 
 struct arguments arguments = {
+	.align = ALIGN_LEFT,
 	.chain = false,
 	.copies = 1,
 	.debug = false,
@@ -118,11 +144,29 @@ struct arguments arguments = {
 	.forced_tape_width = 0,
 	.save_png = NULL,
 	.verbose = 0,
-	.timeout = 1
+	.timeout = -1,		/* -1 = not given; 0 is already "infinity" */
+	.serial = NULL
 };
 
 job_t *jobs = NULL;
 job_t *last_added_job = NULL;
+
+
+/* --------------------------------------------------------------------
+   -------------------------------------------------------------------- */
+
+char * gdImageStringFT_180dpi(gdImagePtr im, int *brect, int fg, char *fontlist, double ptsize, double angle, int x, int y, char *string)
+{
+	gdFTStringExtra extra;
+	memset(&extra, 0, sizeof(gdFTStringExtra));
+
+	extra.flags = gdFTEX_RESOLUTION;
+	extra.hdpi = 180;
+	extra.vdpi = 180;
+
+	return gdImageStringFTEx(im, brect, fg, fontlist, ptsize, angle, x, y, string, &extra);
+}
+
 
 /* --------------------------------------------------------------------
    -------------------------------------------------------------------- */
@@ -138,7 +182,7 @@ void rasterline_setpixel(uint8_t* rasterline, size_t size, int pixel)
 	return;
 }
 
-int print_img(ptouch_dev ptdev, gdImage *im, int chain)
+int print_img(ptouch_dev ptdev, gdImage *im, int chain, int precut)
 {
 	uint8_t rasterline[(ptdev->devinfo->max_px)/8];
 
@@ -156,7 +200,13 @@ int print_img(ptouch_dev ptdev, gdImage *im, int chain)
 		return -1;
 	}
 	printf(_("image size (%ipx x %ipx)\n"), gdImageSX(im), gdImageSY(im));
-	int offset = ((int)max_pixels / 2) - (gdImageSY(im)/2);	/* always print centered */
+	int offset = ((int)max_pixels / 2) - (gdImageSY(im)/2);	/* center within the printhead */
+	/* Some models do not center the print area on the printhead. pin_offset
+	   is a fixed per-device shift (in pins/px, constant across tape widths)
+	   that corrects for this; it is 0 where centering is already correct.
+	   See the Brother "Software Developer's Manual - Raster Command
+	   Reference, PT-P900/P900W/P950NW", section 2.3.5 "Raster line". */
+	offset += ptdev->devinfo->pin_offset;
 	printf("max_pixels=%ld, offset=%d\n", max_pixels, offset);
 	if ((ptdev->devinfo->flags & FLAG_RASTER_PACKBITS) == FLAG_RASTER_PACKBITS) {
 		if (arguments.debug) {
@@ -181,9 +231,11 @@ int print_img(ptouch_dev ptdev, gdImage *im, int chain)
 		}
 	}
 	if ((ptdev->devinfo->flags & FLAG_HAS_PRECUT) == FLAG_HAS_PRECUT) {
-		ptouch_send_precut_cmd(ptdev, 1);
-		if (arguments.debug) {
-			printf(_("send precut command\n"));
+		if (precut) {
+			ptouch_send_precut_cmd(ptdev, 1);
+			if (arguments.debug) {
+				printf(_("send precut command\n"));
+			}
 		}
 	}
 	/* send chain command after precut, to allow precutting before chain */
@@ -257,6 +309,7 @@ int write_png(gdImage *im, const char *file)
 	}
 	gdImagePng(im, f);
 	fclose(f);
+	printf(_("printing '%s' requires %.1f mm of tape\n"), file, (float)gdImageSX(im) / gdImageResolutionX(im) * 25.4);
 	return 0;
 }
 
@@ -268,16 +321,20 @@ int get_baselineoffset(char *text, char *font, int fsz)
 {
 	int brect[8];
 
-	/* NOTE: This assumes that 'o' is always on the baseline */
-	gdImageStringFT(NULL, &brect[0], -1, font, fsz, 0.0, 0, 0, "o");
-	int o_offset = brect[1];
-	gdImageStringFT(NULL, &brect[0], -1, font, fsz, 0.0, 0, 0, text);
+	/* NOTE: This assumes that 'z' is on the baseline for the selected font.
+	   'z' was choosen instead of 'o' because letters withstraight baseline
+	   are the better choice for the majority of fonts here.
+	   If this makes problems with non-latin fonts with lots of vertically
+	   protruding serifs or decorations, change 'z' to 'o' */
+	gdImageStringFT_180dpi(NULL, &brect[0], -1, font, fsz, 0.0, 0, 0, "z");
+	int z_offset = brect[1];
+	gdImageStringFT_180dpi(NULL, &brect[0], -1, font, fsz, 0.0, 0, 0, text);
 	int text_offset = brect[1];
 	if (arguments.debug) {
-		printf(_("debug: o baseline offset - %d\n"), o_offset);
+		printf(_("debug: z baseline offset - %d\n"), z_offset);
 		printf(_("debug: text baseline offset - %d\n"), text_offset);
 	}
-	return text_offset-o_offset;
+	return text_offset-z_offset;
 }
 
 /* --------------------------------------------------------------------
@@ -287,11 +344,22 @@ int get_baselineoffset(char *text, char *font, int fsz)
    -------------------------------------------------------------------- */
 int find_fontsize(int want_px, char *font, char *text)
 {
+	// stabilize font size determination by always accounting for common ascenders and descenders
+	const char *common_chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnoprqstuvwxyz{|}~";
+	char *combined_text = (char *)malloc(strlen(text) + strlen(common_chars) + 1);
+	if (!combined_text) {
+		fprintf(stderr, "Memory allocation failed\n");
+		return -1;
+	}
+
+	strcpy(combined_text, text);
+	strcat(combined_text, common_chars);
+
 	int save = 0;
 	int brect[8];
 
 	for (int i=4; ; ++i) {
-		if (gdImageStringFT(NULL, &brect[0], -1, font, i, 0.0, 0, 0, text) != NULL) {
+		if (gdImageStringFT_180dpi(NULL, &brect[0], -1, font, i, 0.0, 0, 0, combined_text) != NULL) {
 			break;
 		}
 		if (brect[1]-brect[5] <= want_px) {
@@ -300,6 +368,9 @@ int find_fontsize(int want_px, char *font, char *text)
 			break;
 		}
 	}
+
+	free(combined_text);
+
 	if (save == 0) {
 		return -1;
 	}
@@ -310,7 +381,7 @@ int needed_width(char *text, char *font, int fsz)
 {
 	int brect[8];
 
-	if (gdImageStringFT(NULL, &brect[0], -1, font, fsz, 0.0, 0, 0, text) != NULL) {
+	if (gdImageStringFT_180dpi(NULL, &brect[0], -1, font, fsz, 0.0, 0, 0, text) != NULL) {
 		return -1;
 	}
 	return brect[2]-brect[0];
@@ -320,7 +391,7 @@ int offset_x(char *text, char *font, int fsz)
 {
 	int brect[8];
 
-	if (gdImageStringFT(NULL, &brect[0], -1, font, fsz, 0.0, 0, 0, text) != NULL) {
+	if (gdImageStringFT_180dpi(NULL, &brect[0], -1, font, fsz, 0.0, 0, 0, text) != NULL) {
 		return -1;
 	}
 	return -brect[0];
@@ -334,7 +405,7 @@ gdImage *render_text(char *font, char *line[], int lines, int print_width)
 	gdImage *im = NULL;
 
 	if (arguments.debug) {
-		printf(_("render_text(): %i lines, font = '%s'\n"), lines, font);
+		printf(_("render_text(): %i lines, font = '%s', align = '%c'\n"), lines, font, arguments.align);
 	}
 	if (gdFTUseFontConfig(1) != GD_TRUE) {
 		printf(_("warning: font config not available\n"));
@@ -342,9 +413,12 @@ gdImage *render_text(char *font, char *line[], int lines, int print_width)
 	if (arguments.font_size > 0) {
 		fsz = arguments.font_size;
 		printf(_("setting font size=%i\n"), fsz);
+		if (arguments.font_margin > 0) {
+			printf(_("ignoring setting font margin=%i\n"), arguments.font_margin);
+		}
 	} else {
 		for (i = 0; i < lines; ++i) {
-			if ((tmp = find_fontsize(print_width/lines, font, line[i])) < 0) {
+			if ((tmp = find_fontsize((print_width-2*arguments.font_margin)/lines, font, line[i])) < 0) {
 				printf(_("could not estimate needed font size\n"));
 				return NULL;
 			}
@@ -363,12 +437,12 @@ gdImage *render_text(char *font, char *line[], int lines, int print_width)
 	im = gdImageCreatePalette(x, print_width);
 	gdImageColorAllocate(im, 255, 255, 255);
 	black = gdImageColorAllocate(im, 0, 0, 0);
-	/* gdImageStringFT(im,brect,fg,fontlist,size,angle,x,y,string) */
+	/* gdImageStringFT_180dpi(im,brect,fg,fontlist,size,angle,x,y,string) */
 	/* find max needed line height for ALL lines */
 	int max_height=0;
 	for (i = 0; i < lines; ++i) {
-		if ((p = gdImageStringFT(NULL, &brect[0], -black, font, fsz, 0.0, 0, 0, line[i])) != NULL) {
-			printf(_("error in gdImageStringFT: %s\n"), p);
+		if ((p = gdImageStringFT_180dpi(NULL, &brect[0], -black, font, fsz, 0.0, 0, 0, line[i])) != NULL) {
+			printf(_("error in gdImageStringFT_180dpi: %s\n"), p);
 		}
 		//int ofs = get_baselineoffset(line[i], font_file, fsz);
 		int lineheight = brect[1]-brect[5];
@@ -395,8 +469,14 @@ gdImage *render_text(char *font, char *line[], int lines, int print_width)
 			printf("debug: line %i pos=%i ofs=%i\n", i+1, pos, ofs);
 		}
 		int off_x = offset_x(line[i], arguments.font_file, fsz);
-		if ((p = gdImageStringFT(im, &brect[0], -black, font, fsz, 0.0, off_x, pos, line[i])) != NULL) {
-			printf(_("error in gdImageStringFT: %s\n"), p);
+		int align_ofs = 0;
+		if (arguments.align == ALIGN_CENTER) {
+			align_ofs = (x - needed_width(line[i], arguments.font_file, fsz)) / 2;
+		} else if (arguments.align == ALIGN_RIGHT) {
+			align_ofs = x - needed_width(line[i], arguments.font_file, fsz);
+		}
+		if ((p = gdImageStringFT_180dpi(im, &brect[0], -black, font, fsz, 0.0, off_x + align_ofs, pos, line[i])) != NULL) {
+			printf(_("error in gdImageStringFT_180dpi: %s\n"), p);
 		}
 	}
 	return im;
@@ -512,6 +592,58 @@ void add_job(job_type_t type, int n, char *line)
 	last_added_job = new_job;
 }
 
+void add_text(struct argp_state *state, char *arg, bool new_job)
+{
+	char *p = arg;
+	bool first_part = true;
+	do {
+		char *next1 = strstr(p, "\\n");
+		char *next2 = strchr(p, '\n');
+		char *next = NULL;
+		char *p_next = NULL;
+		int skip = 0;
+
+		if (next1 && next2) {
+			if (next1 < next2) {
+				next = next1;
+				skip = 2;
+			} else {
+				next = next2;
+				skip = 1;
+			}
+		} else if (next1) {
+			next = next1;
+			skip = 2;
+		} else if (next2) {
+			next = next2;
+			skip = 1;
+		}
+
+		if (next) {
+			*next = '\0';
+			p_next = next + skip;
+		} else {
+			p_next = NULL;
+		}
+
+		if (new_job && first_part) {
+			add_job(JOB_TEXT, 1, p);
+		} else {
+			if (!last_added_job || last_added_job->type != JOB_TEXT) {
+				add_job(JOB_TEXT, 1, p);
+			} else {
+				if (last_added_job->n >= MAX_LINES) {
+					argp_failure(state, 1, EINVAL, _("Only up to %d lines are supported"), MAX_LINES);
+					return;
+				}
+				last_added_job->lines[last_added_job->n++] = p;
+			}
+		}
+		p = p_next;
+		first_part = false;
+	} while (p);
+}
+
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
 	struct arguments *arguments = (struct arguments *)state->input;
@@ -526,23 +658,27 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 		case 3: // fontsize
 			arguments->font_size = strtol(arg, NULL, 10);
 			break;
-		case 4: // writepng
+		case 4: // fontmargin
+			arguments->font_margin = strtol(arg, NULL, 10);
+			break;
+		case 'w': // write-png
 			arguments->save_png = arg;
 			break;
-		case 5: // force-tape-width
+		case 6: // force-tape-width
 			arguments->forced_tape_width = strtol(arg, NULL, 10);
 			break;
-		case 6: // copies
+		case 7: // copies
 			arguments->copies = strtol(arg, NULL, 10);
 			break;
-		case 7: // timeout
+		case 8: // timeout
 			arguments->timeout = strtol(arg, NULL, 10);
 			break;
 		case 'i': // image
 			add_job(JOB_IMAGE, 1, arg);
 			break;
 		case 't': // text
-			add_job(JOB_TEXT, 1, arg);
+			//printf("adding text job with alignment %i\n", arguments->align);
+			add_text(state, arg, true);
 			break;
 		case 'c': // cutmark
 			add_job(JOB_CUTMARK, 0, NULL);
@@ -553,18 +689,26 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 		case 10: // chain
 			arguments->chain = true;
 			break;
+		case 11: // precut
+			arguments->precut = true;
+			break;
+		case 12: // serial
+			arguments->serial = arg;
+			break;
+		case 'a': // align
+			if ((strcmp(arg, "c") == 0) || (strcmp(arg, "center") == 0)) {
+				arguments->align = ALIGN_CENTER;
+			} else if ((strcmp(arg, "r") == 0) || (strcmp(arg, "right") == 0)) {
+				arguments->align = ALIGN_RIGHT;
+			} else if ((strcmp(arg, "l") == 0) || (strcmp(arg, "left") == 0)) {
+				arguments->align = ALIGN_LEFT;
+			} else {
+				printf("unknown alignment, defaulting to left\n");
+				arguments->align = ALIGN_LEFT;
+			}
+			break;
 		case 'n': // newline
-			if (!last_added_job || last_added_job->type != JOB_TEXT) {
-				add_job(JOB_TEXT, 1, arg);
-				break;
-			}
-
-			if (last_added_job->n >= MAX_LINES) { // max number of lines reached
-				argp_failure(state, 1, EINVAL, _("Only up to %d lines are supported"), MAX_LINES);
-				break;
-			}
-
-			last_added_job->lines[last_added_job->n++] = arg;
+			add_text(state, arg, false);
 			break;
 		case 20: // info
 			arguments->info = true;
@@ -572,6 +716,13 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 		case 21: // list-supported
 			ptouch_list_supported();
 			exit(0);
+		case 22: { // list-connected
+			int n = ptouch_list_connected();
+			if (n == 0) {
+				fprintf(stderr, _("No P-Touch printer found on USB (remember to put switch to position E)\n"));
+			}
+			exit(n > 0 ? 0 : 5);
+		}
 		case ARGP_KEY_ARG:
 			argp_failure(state, 1, E2BIG, _("No arguments supported"));
 			break;
@@ -608,11 +759,17 @@ int main(int argc, char *argv[])
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
 	if (!arguments.forced_tape_width) {
-		if ((ptouch_open(&ptdev)) < 0) {
+		if ((ptouch_open_serial(&ptdev, arguments.serial)) < 0) {
 			return 5;
 		}
 		if (ptouch_init(ptdev) != 0) {
 			printf(_("ptouch_init() failed\n"));
+		}
+		/* Resolve the timeout only now, because it can depend on which
+		   printer answered. An explicit --timeout always wins. */
+		if (arguments.timeout < 0) {
+			arguments.timeout = ptdev->devinfo->min_timeout > 0
+				? ptdev->devinfo->min_timeout : 1;
 		}
 		if (ptouch_getstatus(ptdev, arguments.timeout) != 0) {
 			printf(_("ptouch_getstatus() failed\n"));
@@ -629,13 +786,13 @@ int main(int argc, char *argv[])
 	}
 
 	if (arguments.info) {
-		printf(_("maximum printing width for this printer is %ldpx\n"), ptouch_get_max_width(ptdev));
+		printf(_("printer has %d dpi, maximum printing width is %ld px\n"), ptouch_get_dpi(ptdev), ptouch_get_max_width(ptdev));
 		printf(_("maximum printing width for this tape is %ldpx\n"), ptouch_get_tape_width(ptdev));
-		printf("media type = %02x (%s)\n", ptdev->status->media_type, pt_mediatype(ptdev->status->media_type));
+		printf("media type = 0x%02x (%s)\n", ptdev->status->media_type, pt_mediatype(ptdev->status->media_type));
 		printf("media width = %d mm\n", ptdev->status->media_width);
-		printf("tape color = %02x (%s)\n", ptdev->status->tape_color, pt_tapecolor(ptdev->status->tape_color));
-		printf("text color = %02x (%s)\n", ptdev->status->text_color, pt_textcolor(ptdev->status->text_color));
-		printf("error = %04x\n", ptdev->status->error);
+		printf("tape color = 0x%02x (%s)\n", ptdev->status->tape_color, pt_tapecolor(ptdev->status->tape_color));
+		printf("text color = 0x%02x (%s)\n", ptdev->status->text_color, pt_textcolor(ptdev->status->text_color));
+		printf("error = 0x%04x\n", ptdev->status->error);
 		if (arguments.debug) {
 			ptouch_rawstatus((uint8_t *)ptdev->status);
 		}
@@ -698,10 +855,12 @@ int main(int argc, char *argv[])
 
 	if (out) {
 		if (arguments.save_png) {
+			int dpi = ptouch_get_dpi(ptdev);
+			gdImageSetResolution(out, dpi, dpi);
 			write_png(out, arguments.save_png);
 		} else {
 			for (int i = 0; i < arguments.copies; ++i) {
-				print_img(ptdev, out, arguments.chain);
+				print_img(ptdev, out, arguments.chain, arguments.precut);
 				if (ptouch_finalize(ptdev, ( arguments.chain || (i < arguments.copies-1) ) ) != 0) {
 					printf(_("ptouch_finalize(%d) failed\n"), arguments.chain);
 					return 2;

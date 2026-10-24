@@ -16,6 +16,12 @@ find_package(GD REQUIRED)
 find_package(Git REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(Intl REQUIRED)
+find_package(argp REQUIRED)
+if(NOT ARGP_IN_LIBC AND NOT HAVE_STRCHRNUL)
+	# See cmake/Findargp.cmake: argp-standalone needs a strchrnul() the
+	# platform does not have, so ptouch-print.c defines one.
+	add_compile_definitions(NEED_STRCHRNUL=1)
+endif()
 
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 
@@ -59,10 +65,18 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	${GD_INCLUDE_DIR}
 	${LIBUSB_INCLUDE_DIRS}
 	${Intl_INCLUDE_DIRS}
+	${ARGP_INCLUDE_DIR}
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
 	ptouch
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+	${GD_LIBRARIES}
+	${LIBUSB_LINK_LIBRARIES}
+	${Intl_LIBRARIES}
+	${ARGP_LIBRARIES}
 )
 
 target_sources(${PROJECT_NAME} PRIVATE
