@@ -76,36 +76,42 @@ class PTouch:
             resize: Whether to resize the image into the correct tape width
             eject: Whether to eject the label after printing, or not for chain printing
         """
-        if type(img) is str:
-            im = Image.open(img)
+        if isinstance(img, str):
+            imImport = Image.open(img)
         else:
-            im = img
-        set_h = self.get_tape_width_px()
-        bytes_buff = buffer(16)  # Make a uint8_t buffer
+            imImport = img
+        # Convert so PNGs have their transparent bg over white
+        im = Image.new("RGBA", imImport.size, "white")
+        im.alpha_composite(imImport.convert("RGBA"))
+
+        tapeHeight = self.get_tape_width_px()
+        printheadW = self.get_printhead_width()
+        bytes_buff_len = printheadW//8
+        bytes_buff = buffer(bytes_buff_len)  # Make a uint8_t buffer
 
         if resize:
-            im = im.resize((int(im.width / im.height * set_h), set_h), resample=Image.Resampling.LANCZOS)
+            im = im.resize((int(im.width / im.height * tapeHeight), tapeHeight), resample=Image.Resampling.LANCZOS)
         else:
-            if im.height > self.get_tape_width_px():
+            if im.height > tapeHeight:
                 raise UserWarning("Image height is greater than the tape width!")
         im = im.convert('1', dither=Image.Dither.NONE)
 
-        image_offset = (self.get_printhead_width() - set_h) // 2
+        image_offset = (self.get_printhead_width() - tapeHeight) // 2
 
         ptouch_rasterstart(self.dev)
 
         for col in range(im.width):
             # print('col: ', col, 'data', ','.join([str(im.getpixel((col, im.height - i - 1))) for i in range(im.height)]))
             # Clear buffer
-            for i in range(16):
+            for i in range(bytes_buff_len):
                 bytes_buff[i] = 0
 
             for i in range(im.height):
                 pc = im.getpixel((col, im.height - i - 1))
                 if pc == 0:
                     buffer_x = (i + image_offset)
-                    bytes_buff[15 - (buffer_x // 8)] |= 1 << (buffer_x % 8)
-            ptouch_sendraster(self.dev, bytes_buff.cast(), 16)
+                    bytes_buff[bytes_buff_len - 1 - (buffer_x // 8)] |= 1 << (buffer_x % 8)
+            ptouch_sendraster(self.dev, bytes_buff.cast(), bytes_buff_len)
 
         ptouch_finalize(self.dev, not eject)
         im.close()
